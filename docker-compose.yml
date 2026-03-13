@@ -1,0 +1,22 @@
+services:
+  raptordb-analyzer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: raptordb-analyzer:latest
+    container_name: raptordb-analyzer
+    ports:
+      - "8510:8501"
+    volumes:
+      # Persist exports written by the app to the host
+      - ./exports:/app/exports
+    environment:
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:8501/_stcore/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
