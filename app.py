@@ -492,11 +492,14 @@ for a richer, AI-authored readiness narrative.
                 if st.button("🖨 Build PDF", key="build_pdf", type="primary"):
                     with st.spinner("Generating PDF — this takes a few seconds..."):
                         try:
+                            _top_df_pdf = score_use_cases(results)
                             pdf_bytes = generate_pdf_report(
                                 results,
                                 issues,
                                 shortlist,
                                 st.session_state.get("conn_info", {}),
+                                top_df=_top_df_pdf,
+                                analysis_days=analysis_days,
                             )
                             st.session_state["pdf_bytes"] = pdf_bytes
                             st.success("PDF ready — click Download below.")
@@ -548,6 +551,7 @@ for a richer, AI-authored readiness narrative.
                 "Ensure the collection captured row counts, reports, and/or PA config."
             )
         else:
+            # ── Summary table (without Business Value — shown in cards below) ──
             def _score_style(val):
                 if val >= 60:
                     return "background-color:#d1fae5; font-weight:600"
@@ -555,20 +559,60 @@ for a richer, AI-authored readiness narrative.
                     return "background-color:#fef9c3"
                 return ""
 
+            display_cols = [c for c in
+                ["Use Case", "Category", "Key Table(s)", "Evidence",
+                 "RaptorDB Pro Benefit", "Score"]
+                if c in top_df.columns]
             styled = (
-                top_df.style
+                top_df[display_cols].style
                 .applymap(_score_style, subset=["Score"])
                 .set_properties(**{"text-align": "left"})
                 .format({"Score": "{:.1f}"})
             )
-            st.dataframe(styled, use_container_width=True, height=420)
+            st.dataframe(styled, use_container_width=True, height=400)
 
-            st.markdown("---")
             st.markdown(
                 "**Score legend:** 🟢 ≥ 60 — strong candidate · "
                 "🟡 35–59 — good candidate · ⚪ < 35 — viable candidate"
             )
 
+            # ── Business Value cards ──────────────────────────────────────────
+            st.markdown("---")
+            st.markdown("#### 💼 Business Value — What This Means for Your Organisation")
+            st.caption(
+                "Each use case translated into plain business language — "
+                "suitable for sharing with stakeholders and decision makers."
+            )
+
+            for rank, row in top_df.iterrows():
+                bv = row.get("Business Value", "")
+                if not bv:
+                    continue
+                score = row["Score"]
+                if score >= 60:
+                    badge_color = "#10b981"   # green
+                elif score >= 35:
+                    badge_color = "#f59e0b"   # amber
+                else:
+                    badge_color = "#64748b"   # gray
+
+                st.markdown(f"""
+<div style="display:flex; gap:14px; align-items:flex-start;
+            background:#f8fafc; border:1px solid #e2e8f0;
+            border-radius:8px; padding:14px 16px; margin-bottom:10px;">
+  <div style="min-width:36px; height:36px; border-radius:6px;
+              background:{badge_color}; color:white; font-weight:700;
+              font-size:15px; display:flex; align-items:center;
+              justify-content:center;">#{rank}</div>
+  <div>
+    <div style="font-weight:700; color:#1a1a2e; font-size:0.95rem;
+                margin-bottom:4px;">{row["Use Case"]}</div>
+    <div style="color:#374151; font-size:0.88rem; line-height:1.55;">{bv}</div>
+  </div>
+</div>
+""", unsafe_allow_html=True)
+
+            st.markdown("---")
             st.markdown("##### Score Distribution")
             chart_data = top_df[["Use Case", "Score"]].set_index("Use Case")
             st.bar_chart(chart_data, use_container_width=True)

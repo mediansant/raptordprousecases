@@ -419,6 +419,144 @@ def _check_workload_profile(results: Dict[str, pd.DataFrame]) -> List[Dict]:
 # =========================================================================
 
 # Friendly display names for well-known ServiceNow tables
+# Business-friendly value statements keyed by table name.
+# Each statement answers: "What does this mean for the business?"
+_BUSINESS_VALUE = {
+    "incident": (
+        "Service desk agents resolve incidents faster because historical search, "
+        "SLA trend reports, and workload dashboards load in seconds instead of minutes — "
+        "directly reducing Mean Time to Resolve (MTTR) and improving end-user satisfaction."
+    ),
+    "change_request": (
+        "Change managers see approval queues, collision risks, and post-change success rates "
+        "in real time, reducing unplanned outages caused by poorly coordinated changes."
+    ),
+    "problem": (
+        "Problem managers identify root causes faster by querying years of incident history "
+        "instantly, shrinking the time between problem detection and permanent fix."
+    ),
+    "sc_request": (
+        "Employees and customers get faster self-service fulfillment because catalog "
+        "request dashboards and SLA reports no longer slow down during peak hours."
+    ),
+    "sc_req_item": (
+        "Fulfillment teams track open requests and backlogs in real time without waiting "
+        "for slow reports, helping them meet delivery commitments to the business."
+    ),
+    "kb_knowledge": (
+        "Employees find answers in the portal faster through quicker knowledge search, "
+        "reducing unnecessary service desk tickets and freeing agents for complex work."
+    ),
+    "sys_audit": (
+        "Security and compliance teams search months or years of audit history in seconds "
+        "during investigations or audits — meeting regulatory deadlines without scrambling."
+    ),
+    "sys_audit_delete": (
+        "Deleted-record audits for compliance and forensic investigations complete in "
+        "seconds instead of timing out, supporting faster regulatory response."
+    ),
+    "sys_journal_field": (
+        "Managers and auditors can instantly trace the full change history of any record, "
+        "supporting compliance reviews, dispute resolution, and governance reporting."
+    ),
+    "sys_history_line": (
+        "Compliance and audit teams access complete change timelines instantly, reducing "
+        "manual effort during audits and accelerating evidence collection."
+    ),
+    "cmdb_ci": (
+        "IT operations teams instantly understand the full blast radius of any outage or "
+        "change, enabling faster triage and reducing the cost of unplanned downtime."
+    ),
+    "cmdb_rel_ci": (
+        "When an outage occurs, teams immediately see which applications, services, and "
+        "users are affected — turning hours of investigation into minutes."
+    ),
+    "cmdb_ci_server": (
+        "Infrastructure teams track server health, capacity, and compliance status in "
+        "real time, enabling proactive decisions before issues impact the business."
+    ),
+    "cmdb_ci_service": (
+        "Service owners see real-time dependency maps and health status, enabling faster "
+        "response when a service degradation affects customers or employees."
+    ),
+    "pa_snapshots": (
+        "Executives and managers access live KPI dashboards instantly rather than waiting "
+        "minutes for data, enabling real-time decision-making during critical situations."
+    ),
+    "pa_snapshot_daily": (
+        "Daily business reviews and performance meetings run on fresh, fast-loading "
+        "dashboards — no more stale data or slow screens during executive presentations."
+    ),
+    "syslog_transaction": (
+        "Platform administrators identify and fix performance bottlenecks faster, "
+        "improving the day-to-day experience for every user of the system."
+    ),
+    "wf_context": (
+        "Automation and workflow managers identify stuck or slow processes in real time, "
+        "preventing business process delays that affect customers and employees."
+    ),
+    "alm_asset": (
+        "Asset managers track the full lifecycle of assets — from procurement to retirement — "
+        "faster, supporting accurate financial reporting and cost optimisation."
+    ),
+    "alm_hardware": (
+        "Finance and IT teams run hardware asset audits and refresh planning reports in "
+        "seconds, supporting better budgeting and compliance with hardware policies."
+    ),
+    "hr_case": (
+        "HR teams resolve employee requests faster with instant access to case history and "
+        "SLA performance data, improving employee experience and HR team productivity."
+    ),
+    "sn_hr_core_case": (
+        "HR business partners get real-time visibility into case volumes and resolution "
+        "times, enabling proactive staffing decisions and service improvement."
+    ),
+    "sn_customerservice_case": (
+        "Customer service managers monitor live queue depths and SLA compliance, allowing "
+        "them to redistribute workload before customers are impacted."
+    ),
+    "em_alert": (
+        "Operations teams see correlated alerts and event patterns in real time, reducing "
+        "alert noise and enabling faster response to genuine incidents."
+    ),
+    "em_event": (
+        "NOC teams process high-volume event streams without performance degradation, "
+        "ensuring no critical infrastructure event is missed during peak periods."
+    ),
+}
+
+# Category-level fallback statements when no table-specific entry exists
+_CATEGORY_VALUE = {
+    "HTAP / PA Aggregation": (
+        "Business dashboards and KPI reports load instantly, giving managers and executives "
+        "real-time visibility to make faster, better-informed decisions."
+    ),
+    "Audit / Log Analytics": (
+        "Compliance and security teams search years of audit history in seconds, meeting "
+        "regulatory requirements faster and reducing the cost of investigations."
+    ),
+    "CMDB Graph Query": (
+        "IT teams instantly understand the impact of any change or outage across all "
+        "connected systems, reducing resolution time and costly unplanned downtime."
+    ),
+    "Large Table Scan": (
+        "Teams across the business get faster access to reports and data, reducing "
+        "wait times and enabling quicker decisions during time-critical situations."
+    ),
+    "Report-Heavy Query Load": (
+        "Multiple teams can run reports simultaneously without slowing each other down, "
+        "eliminating the need to schedule reports off-hours to avoid contention."
+    ),
+    "Performance Benchmark": (
+        "Users experience noticeably faster page loads and search results every day, "
+        "reducing frustration and improving productivity across the organisation."
+    ),
+    "Mixed OLTP/OLAP": (
+        "The platform handles both transaction processing and reporting without one "
+        "degrading the other — improving reliability for all users simultaneously."
+    ),
+}
+
 _TABLE_LABELS = {
     "task": "Task (base)",
     "incident": "Incident Management",
@@ -558,12 +696,17 @@ def score_use_cases(results: Dict[str, pd.DataFrame]) -> pd.DataFrame:
             evidence_parts.append("appears in slow tx")
 
         label = _TABLE_LABELS.get(table, table)
+        business_value = _BUSINESS_VALUE.get(
+            table, _CATEGORY_VALUE.get(category, "Faster data access improves "
+                                       "productivity and decision-making across the business.")
+        )
         candidates.append({
             "Use Case": label,
             "Category": category,
             "Key Table(s)": table,
             "Evidence": ", ".join(evidence_parts),
             "RaptorDB Pro Benefit": benefit,
+            "Business Value": business_value,
             "Score": round(score, 1),
         })
 
@@ -584,6 +727,11 @@ def score_use_cases(results: Dict[str, pd.DataFrame]) -> pd.DataFrame:
                 "Key Table(s)": "cmdb_ci, cmdb_rel_ci",
                 "Evidence": f"{total_cis:,} CIs, {ci_classes} classes, {total_rels:,} relationships",
                 "RaptorDB Pro Benefit": "Graph traversals & impact queries faster with columnar indexes",
+                "Business Value": (
+                    "When a server goes down, IT teams instantly see every application, "
+                    "service, and business process affected — turning hours of manual "
+                    "investigation into a minute-long automated impact assessment."
+                ),
                 "Score": round(score, 1),
             })
 
@@ -598,6 +746,11 @@ def score_use_cases(results: Dict[str, pd.DataFrame]) -> pd.DataFrame:
             "Key Table(s)": "Various (syslog_transaction)",
             "Evidence": f"{total_slow} slow tx patterns, avg {avg_ms:.0f} ms",
             "RaptorDB Pro Benefit": "Direct before/after benchmark — measurable, customer-visible ROI",
+            "Business Value": (
+                "Every user who currently waits more than 5 seconds for a page or report "
+                "gets that time back — measurable in hours saved per day across the workforce, "
+                "with clear before/after numbers to justify the investment."
+            ),
             "Score": round(score, 1),
         })
 
@@ -613,6 +766,11 @@ def score_use_cases(results: Dict[str, pd.DataFrame]) -> pd.DataFrame:
             "Key Table(s)": "pa_snapshots, pa_snapshot_daily",
             "Evidence": f"{len(pa_dash_df)} dashboards, {len(pa_ind_df)} indicators",
             "RaptorDB Pro Benefit": "Dashboard load 5–20× faster with columnar snapshot queries",
+            "Business Value": (
+                "Executives and team leads open performance dashboards and see live data "
+                "immediately — no more waiting minutes for charts to load during stand-ups, "
+                "board reviews, or daily operations meetings."
+            ),
             "Score": round(score, 1),
         })
 
@@ -628,13 +786,18 @@ def score_use_cases(results: Dict[str, pd.DataFrame]) -> pd.DataFrame:
             "Key Table(s)": "sys_audit, sys_journal_field, sys_history_line",
             "Evidence": f"{audit_rows:,} combined audit/journal rows",
             "RaptorDB Pro Benefit": "Columnar compression cuts storage 50–70%; range scans 20–100× faster",
+            "Business Value": (
+                "Compliance teams respond to regulatory audits and security investigations in "
+                "hours instead of days — searching years of change history instantly, "
+                "reducing audit preparation costs and regulatory risk."
+            ),
             "Score": round(score, 1),
         })
 
     if not candidates:
         return pd.DataFrame(columns=[
             "Use Case", "Category", "Key Table(s)", "Evidence",
-            "RaptorDB Pro Benefit", "Score"
+            "RaptorDB Pro Benefit", "Business Value", "Score"
         ])
 
     df = pd.DataFrame(candidates)
