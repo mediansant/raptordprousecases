@@ -4,6 +4,7 @@ RaptorDB Pro Readiness Analyzer — CLI Report Generator
 
 Run this script on any machine with Python 3.9+ and the required packages.
 It connects to your ServiceNow instance, collects data, and generates a PDF report.
+Optionally generates a Claude AI prompt file and CSV data export.
 
 Usage:
     python generate_report.py [options]
@@ -53,6 +54,7 @@ from collector import collect_all
 from analyzer import analyze_all, score_use_cases
 from pov_selector import get_pov_shortlist
 from pdf_report import generate_pdf_report
+from report_engine import generate_claude_prompt
 
 
 # ---------------------------------------------------------------------------
@@ -103,6 +105,18 @@ def parse_args():
         help="Also export raw collected data as CSV files alongside the PDF",
     )
     parser.add_argument(
+        "--claude",
+        action="store_true",
+        default=False,
+        help="Generate Claude AI prompt file (skips the interactive prompt)",
+    )
+    parser.add_argument(
+        "--no-claude",
+        action="store_true",
+        default=False,
+        help="Skip the Claude export prompt entirely",
+    )
+    parser.add_argument(
         "--timeout",
         type=int,
         default=30,
@@ -126,6 +140,17 @@ def _prompt(label: str, current: str, secret: bool = False) -> str:
     return value
 
 
+def _ask_yes_no(question: str) -> bool:
+    """Ask a yes/no question and return True for yes."""
+    while True:
+        answer = input(f"{question} [y/n]: ").strip().lower()
+        if answer in ("y", "yes"):
+            return True
+        if answer in ("n", "no"):
+            return False
+        print("  Please enter y or n.")
+
+
 def _progress(pct: float, msg: str):
     bar_len = 30
     filled = int(bar_len * pct)
@@ -144,6 +169,72 @@ def _export_csv(results: dict, issues: list, export_dir: Path):
     with open(export_dir / "flagged_issues.json", "w") as f:
         json.dump(issues, f, indent=2, default=str)
     print(f"  CSV data exported to: {export_dir}")
+
+
+def _export_claude_package(results: dict, issues: list,
+                            export_dir: Path, timestamp: str):
+    """
+    Write the Claude prompt .txt file and all supporting CSV data into
+    export_dir/claude_export_<timestamp>/.
+
+    Returns the path to the prompt file.
+    """
+    claude_dir = export_dir / f"claude_export_{timestamp}"
+    claude_dir.mkdir(parents=True, exist_ok=True)
+
+    # ── Prompt file ───────────────────────────────────────────────
+    prompt_text = generate_claude_prompt(results, issues)
+    prompt_path = claude_dir / "claude_prompt.txt"
+    prompt_path.write_text(prompt_text, encoding="utf-8")
+
+    # ── Supporting CSV data ───────────────────────────────────────
+    csv_datasets = [
+        "system_properties",
+        "core_table_row_counts",
+        "report_table_summary",
+        "pa_table_summary",
+        "slow_transaction_summary",
+        "cmdb_summary",
+        "cmdb_ci_classes",
+        "composite_indexes",
+        "indexed_fields",
+        "scheduled_jobs",
+        "table_rotation",
+    ]
+    written = []
+    for key in csv_datasets:
+        df = results.get(key)
+        if df is not None and not df.empty:
+            out = claude_dir / f"{key}.csv"
+            df.to_csv(out, index=False)
+            written.append(f"{key}.csv  ({len(df)} rows)")
+
+    # ── Instructions file ─────────────────────────────────────────
+    instructions = [
+        "HOW TO USE THIS CLAUDE EXPORT",
+        "=" * 50,
+        "",
+        "1. Open claude.ai (or any Claude interface)",
+        "2. Start a new conversation",
+        "3. Upload ALL the CSV files in this folder as attachments",
+        "4. Copy the full contents of claude_prompt.txt",
+        "5. Paste it as your first message",
+        "6. Claude will generate a rich, data-specific RaptorDB Pro",
+        "   Readiness Report with exact table names and numbers.",
+        "",
+        "Files to upload:",
+    ]
+    for f in written:
+        instructions.append(f"  - {f}")
+    instructions += [
+        "",
+        "Generated: " + datetime.now().isoformat(timespec="seconds"),
+    ]
+    (claude_dir / "INSTRUCTIONS.txt").write_text(
+        "\n".join(instructions), encoding="utf-8"
+    )
+
+    return prompt_path, claude_dir
 
 
 # ---------------------------------------------------------------------------
@@ -233,11 +324,43 @@ def main():
         csv_dir = output_path.parent / f"raptordb_export_{timestamp}"
         _export_csv(results, issues, csv_dir)
 
+    # ── Claude export — ask interactively unless flag was passed ──
+    generate_claude = False
+    if args.claude:
+        generate_claude = True
+    elif not args.no_claude:
+        print()
+        print("─" * 60)
+        print("  OPTIONAL: Claude AI Analysis")
+        print("─" * 60)
+        print("  Generate a prompt file + CSV data package that you can")
+        print("  upload to claude.ai for a rich, AI-authored readiness")
+        print("  report with specific recommendations.")
+        print()
+        generate_claude = _ask_yes_no("  Generate Claude export package?")
+
+    if generate_claude:
+        print("  Building Claude export package...")
+        prompt_path, claude_dir = _export_claude_package(
+            results, issues,
+            export_dir=output_path.parent,
+            timestamp=timestamp,
+        )
+        print(f"  Claude package saved to: {claude_dir.resolve()}")
+        print()
+        print("  Next steps:")
+        print("  1. Open claude.ai and start a new conversation")
+        print("  2. Upload all CSV files from the claude_export folder")
+        print("  3. Paste the contents of claude_prompt.txt as your message")
+        print("  (See INSTRUCTIONS.txt in the folder for full details)")
+
     # ── Summary ───────────────────────────────────────────────────
     print()
     print("=" * 60)
     print("  Report generation complete!")
-    print(f"  Output : {output_path.resolve()}")
+    print(f"  PDF    : {output_path.resolve()}")
+    if generate_claude:
+        print(f"  Claude : {claude_dir.resolve()}")
     print(f"  Issues : {len(issues)} total  |  {critical} critical  |  {high} high")
     print("=" * 60)
     print()

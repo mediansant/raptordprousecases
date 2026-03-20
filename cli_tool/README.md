@@ -218,6 +218,8 @@ python generate_report.py
 | `--days` | `-d` | `7` | Days of slow-transaction history to analyse |
 | `--output` | `-o` | auto-named | Output PDF file path |
 | `--export-csv` | | off | Also save raw data as CSV files |
+| `--claude` | | off | Generate Claude AI prompt package (skips the prompt) |
+| `--no-claude` | | off | Skip the Claude export prompt entirely |
 | `--no-ssl-verify` | | off | Disable SSL check (sub-prod instances) |
 | `--timeout` | | `30` | HTTP request timeout in seconds |
 
@@ -243,12 +245,37 @@ python generate_report.py --url https://mycompany.service-now.com \
 
 ---
 
+## Claude AI Export (optional)
+
+After the PDF is generated, the tool asks:
+
+```
+Generate Claude export package? [y/n]:
+```
+
+If you answer **y**, it creates a `claude_export_<timestamp>/` folder containing:
+
+- **`claude_prompt.txt`** — a fully structured prompt with all instance data embedded
+- **CSV files** — the key data sets Claude needs to reference specific numbers
+- **`INSTRUCTIONS.txt`** — step-by-step guide on how to use the files
+
+**How to use it with Claude:**
+1. Go to [claude.ai](https://claude.ai) and start a new conversation
+2. Upload all the CSV files from the `claude_export_` folder as attachments
+3. Copy and paste the full contents of `claude_prompt.txt` as your message
+4. Claude generates a rich, data-specific readiness report referencing actual table names, row counts, and query patterns from your instance
+
+You can also trigger this without the prompt using `--claude`, or skip it entirely with `--no-claude`.
+
+---
+
 ## Output
 
-| File | Description |
+| File / Folder | Description |
 |---|---|
 | `RaptorDB_Readiness_<timestamp>.pdf` | Full readiness report (always generated) |
-| `raptordb_export_<timestamp>/` | Folder with CSV files + `flagged_issues.json` (only with `--export-csv`) |
+| `raptordb_export_<timestamp>/` | Raw CSV data + `flagged_issues.json` (with `--export-csv`) |
+| `claude_export_<timestamp>/` | Claude prompt + supporting CSVs + instructions (optional) |
 
 The PDF is saved in the **same folder where you run the script** unless you
 specify a path with `--output`.
