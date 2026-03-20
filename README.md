@@ -1,10 +1,38 @@
 # RaptorDB Pro Readiness Analyzer
 
-A Streamlit application that connects to a ServiceNow instance via REST API, collects performance-relevant data, scores and ranks RaptorDB Pro use cases, generates a POV shortlist, and produces customer-ready PDF and Word reports — with an optional Claude prompt for AI-assisted analysis.
+A tool that connects to a ServiceNow instance via REST API, collects performance-relevant data, scores and ranks RaptorDB Pro use cases, generates a POV shortlist, and produces a customer-ready PDF report.
+
+Available in two modes:
+
+| Mode | Best for | Entry point |
+|---|---|---|
+| **CLI tool** | Running on a customer machine — no browser needed | `cli_tool/generate_report.py` |
+| **Streamlit web app** | Interactive exploration with charts and tabs | `app.py` |
 
 ---
 
-## Quick Start
+## CLI Tool — Customer Deployments
+
+The `cli_tool/` folder is a self-contained package you can drop on any customer
+machine. It has no dependency on Streamlit and requires only Python 3.9+.
+
+See **[cli_tool/README.md](cli_tool/README.md)** for full setup and usage
+instructions for both macOS and Windows.
+
+### Quick run
+
+```bash
+cd cli_tool
+pip install -r requirements.txt
+python generate_report.py
+```
+
+The script prompts for instance URL, username, and password, then generates
+a `RaptorDB_Readiness_<timestamp>.pdf` in the current folder.
+
+---
+
+## Streamlit Web App — Interactive Mode
 
 ### Option A — Command Line (local Python)
 
@@ -175,13 +203,24 @@ The scored use cases, POV shortlist, readiness report, and PDF are ready to pres
 ## Architecture
 
 ```
-app.py            Streamlit UI — sidebar, tabs, sidebar panels
-sn_client.py      ServiceNow REST client — auth, pagination, 429 handling
-collector.py      Data collection — what to pull and how
-analyzer.py       Issue detection + composite use-case scoring
-report_engine.py  Built-in Markdown report generator + .docx export
-pov_selector.py   POV candidate scoring — exact reports, dashboards, slow queries
-pdf_report.py     ReportLab PDF generator — 5-page customer-ready report
+├── app.py                 Streamlit UI — sidebar, tabs, panels
+├── sn_client.py           ServiceNow REST client — auth, pagination, 429 handling
+├── collector.py           Data collection — what to pull and how
+├── analyzer.py            Issue detection + composite use-case scoring
+├── report_engine.py       Markdown report generator + .docx export
+├── pov_selector.py        POV candidate scoring — reports, dashboards, slow queries
+├── pdf_report.py          ReportLab PDF generator — customer-ready report
+│
+└── cli_tool/              Self-contained CLI package for customer machines
+    ├── generate_report.py     Main entry-point script
+    ├── sn_client.py           (copy)
+    ├── collector.py           (copy)
+    ├── analyzer.py            (copy)
+    ├── pov_selector.py        (copy)
+    ├── pdf_report.py          (copy)
+    ├── report_engine.py       (copy)
+    ├── requirements.txt       No Streamlit — minimal dependencies
+    └── README.md              Setup & usage for macOS and Windows
 ```
 
 ---
